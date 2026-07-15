@@ -24,7 +24,7 @@
 **Dev BPB after:** 2.5020
 **Conclusion:** SwiGLU's gating mechanism and RoPE's relative positional awareness clearly outperform the baseline equivalents, providing a clean boost in evaluation BPB while freeing up parameter space.
 
-## Experiment 4: Deep & Narrow Architecture Swap (The "Ambitious Failure")
+## Experiment 4: Deep & Narrow Architecture Swap
 **Hypothesis:** Literature often suggests "deep and narrow" beats "shallow and wide" for small models. We attempted an aggressive architectural swap to 9 layers with an embedding dimension of 96 and 12 heads (head_dim=8) to see if extreme depth would yield better linguistic abstraction.
 **What changed:** Reconfigured the model to `n_layer=9`, `n_embd=96`, `n_head=12`.
 **Dev BPB before:** 2.5020

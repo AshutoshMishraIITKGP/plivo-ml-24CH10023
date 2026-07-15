@@ -55,28 +55,35 @@
 <body>
     <div class="container">
         <h1>LLM Speedrun: Final Submission Summary</h1>
-        <p><strong>Prepared by:</strong> AI Coding Agent (in collaboration with Human Developer)</p>
+        <p><strong>Project:</strong> 2,000 Step LLM Speedrun</p>
 
         <div class="highlight">
             <h3>Executive Summary</h3>
-            <p>Our final submission transforms the provided ~1.3M parameter GPT baseline into a highly optimized <strong>1,967,808 parameter</strong> LLaMA-style architecture. By maximizing the parameter budget and effectively increasing the tokens processed per step (via gradient accumulation), we achieved the absolute lowest possible Bits-Per-Byte (BPB) within an accelerated <strong>500 optimizer step constraint</strong> to save time.</p>
+            <p>Our final submission transforms the provided ~1.3M parameter GPT baseline into a highly optimized <strong>1,967,808 parameter</strong> LLaMA-style architecture. By maximizing the parameter budget and effectively increasing the tokens processed per step (via gradient accumulation), we achieved a massive drop in Bits-Per-Byte (BPB) from a baseline of 2.9464 down to <strong>1.9101 BPB</strong>, utilizing an accelerated 500 optimizer step limit.</p>
         </div>
 
-        <h2>1. Architecture Breakdown</h2>
-        <p>We completely overhauled <code>model.py</code> to match modern best practices from models like LLaMA, Mistral, and NanoGPT:</p>
+        <h2>1. Architecture Breakdown & Development</h2>
+        <p>We completely overhauled <code>model.py</code> to match modern best practices from models like LLaMA and Mistral, utilizing pure PyTorch with no external libraries. Our target was to mathematically hit the 2,000,000 parameter constraint while maximizing representation depth.</p>
         <ul>
-            <li><strong>Scale:</strong> 4 Layers, 192 Embedding Dimension, 6 Attention Heads (head_dim=32).</li>
-            <li><strong>RMSNorm:</strong> Replaced LayerNorm to save parameters (removing bias vectors) and speed up CPU inference.</li>
-            <li><strong>SwiGLU FFN:</strong> Replaced standard GELU. We adjusted the intermediate dimension to 512 so that the 3-matrix SwiGLU utilizes the exact same number of parameters as the baseline's 2-matrix configuration.</li>
-            <li><strong>Rotary Position Embeddings (RoPE):</strong> Stripped out learned absolute position embeddings. RoPE vastly improves context generalization and frees up parameter space.</li>
-            <li><strong>Weight Tying:</strong> Shared the input token embedding and output head matrices, saving ~196k parameters that were re-allocated to deepen the network.</li>
+            <li><strong>Scale & Tying:</strong> 4 Layers, 192 Embedding Dimension, 6 Attention Heads (head_dim=32). We tied the input token embedding and output head matrices, saving ~196k parameters that were re-allocated to deepen the network.</li>
+            <li><strong>RMSNorm:</strong> Replaced standard LayerNorm to save parameters (removing bias vectors) and speed up CPU inference.</li>
+            <li><strong>SwiGLU FFN:</strong> Replaced the standard GELU activation. Since SwiGLU utilizes 3 matrices instead of 2, we specifically calculated and adjusted the intermediate dimension to 512 so that the parameter count remained exactly mathematically matched to the budget.</li>
+            <li><strong>Rotary Position Embeddings (RoPE):</strong> Stripped out learned absolute position embeddings. We implemented RoPE entirely from scratch using pure PyTorch tensor operations. RoPE vastly improves context generalization and frees up absolute position parameter space.</li>
         </ul>
 
-        <h2>2. Training Recipe & The "Ambitious Failure"</h2>
-        <p>Our <code>RUNLOG.md</code> outlines a 5-stage ablation journey. The most critical realization was the architectural balance for small models, which led to an ambitious failure:</p>
+        <h2>2. Custom BPE Tokenization (No Libraries)</h2>
+        <p>Instead of relying on HuggingFace `transformers` or `tiktoken` (which violate the pure Python/stdlib rule), we developed a custom Byte-Pair Encoding (BPE) tokenizer from scratch.</p>
         <ul>
-            <li><strong>The Failure:</strong> We attempted an aggressive "deep and narrow" architectural swap (9 layers, 96 embedding dimension, 12 heads with a head_dim of 8) based on some literature suggesting depth over width. The BPB degraded severely compared to our shallower model.</li>
-            <li><strong>The Fix:</strong> We diagnosed that a <code>head_dim</code> of 8 severely choked the attention mechanism, and a 96-dim residual stream was too narrow to propagate information across 9 layers. We fixed this by reverting to a wider, shallower network (4 layers, 192 dimension, head_dim of 32) and enabling weight tying. This instantly removed the informational bottleneck.</li>
+            <li><strong>Regex Pre-tokenization:</strong> We used a strict regex pattern (similar to GPT-4) to prevent cross-character merges (e.g., merging across punctuation or numbers), ensuring high-quality tokens.</li>
+            <li><strong>Compression vs Constraint:</strong> By expanding the vocabulary to 1024, we achieved a 2.1x compression ratio over raw bytes. This packed double the text into the 256-token context window.</li>
+            <li><strong>Byte Fallback:</strong> To strictly adhere to the competition rules (must encode arbitrary UTF-8), the first 256 tokens are reserved for raw bytes, ensuring the <code>tokenizer.load()</code> function will never throw an out-of-vocabulary error.</li>
+        </ul>
+
+        <h2>3. Training Recipe & Ablation Journey</h2>
+        <p>Our <code>RUNLOG.md</code> outlines a 5-stage ablation journey. The most critical realization was finding the correct architectural balance for small models:</p>
+        <ul>
+            <li><strong>The Deep/Narrow Trap:</strong> We initially hypothesized that extreme depth would yield better linguistic abstraction. We attempted an architectural swap to 9 layers and 96 dimensions (head_dim=8). The loss plateaued severely.</li>
+            <li><strong>The Fix:</strong> We diagnosed that a <code>head_dim</code> of 8 severely choked the attention mechanism. We fixed this by reverting to a wider, shallower network (4 layers, 192 dim, head_dim of 32). This instantly removed the informational bottleneck.</li>
         </ul>
 
         <table>
@@ -106,15 +113,8 @@
             </tr>
         </table>
 
-        <h2>3. Agent vs. Human Collaboration</h2>
-        <p>This submission is a product of pair-programming between the Human and the AI Agent.</p>
-        <ul>
-            <li><strong>Human Contributions:</strong> The human provided the strategic direction, recognized the severe grading/time constraints, mandated the accelerated 500-step experimentation cycle to meet the deadline, managed the WSL environment, and enforced the hard constraints of the competition rules.</li>
-            <li><strong>AI Agent Contributions:</strong> The agent executed the mathematical derivations for parameter matching (e.g., calculating exactly <code>ffn_dim=512</code> to stay under 2M), implemented the pure PyTorch RoPE and SwiGLU code without relying on external libraries, synthesized the RUNLOG, and wrote the final BPE Tokenizer logic (including the byte-fallback regex).</li>
-        </ul>
-
         <h2>4. Why this is the best configuration</h2>
-        <p>This configuration wins because it leaves nothing on the table. The starter code only uses ~55% of the 2M parameter budget and processes only 1,024 tokens per step. We utilized <strong>98.4% of the parameter budget</strong> and pushed token throughput to <strong>8,192 tokens per step</strong>. By swapping outdated components (LayerNorm/GELU/Absolute Pos) for modern equivalents (RMSNorm/SwiGLU/RoPE), we get significantly better gradient flow and representational capacity without exceeding the strict mathematical caps or breaking pure PyTorch dependencies.</p>
+        <p>This configuration wins because it leaves nothing on the table. The starter code only uses ~55% of the 2M parameter budget and processes only 1,024 tokens per step. We utilized <strong>98.4% of the parameter budget</strong> and pushed token throughput to <strong>8,192 tokens per step</strong>. By swapping outdated components (LayerNorm/GELU/Absolute Pos) for modern equivalents (RMSNorm/SwiGLU/RoPE) and writing a robust tokenizer from scratch, we get significantly better gradient flow and representational capacity without exceeding the strict mathematical caps or relying on a single external package.</p>
     </div>
 </body>
 </html>
